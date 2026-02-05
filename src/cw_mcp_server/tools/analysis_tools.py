@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-# Copyright 2024 Uptycs, Inc. All rights reserved.
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 
 import asyncio
 import boto3
