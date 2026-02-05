@@ -3,6 +3,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+
 import boto3
 import json
 from datetime import datetime, timedelta
@@ -14,20 +15,43 @@ from collections import Counter
 class CloudWatchLogsResource:
     """Resource class for handling CloudWatch Logs resources."""
 
-    def __init__(self, profile_name=None, region_name=None):
+    def __init__(self, profile_name=None, region_name=None,
+                 aws_access_key_id=None, aws_secret_access_key=None, aws_session_token=None):
         """Initialize the CloudWatch Logs resource client.
 
         Args:
             profile_name: Optional AWS profile name to use for credentials
             region_name: Optional AWS region name to use for API calls
+            aws_access_key_id: Optional AWS access key ID (for direct credential injection)
+            aws_secret_access_key: Optional AWS secret access key (for direct credential injection)
+            aws_session_token: Optional AWS session token (for temporary credentials)
         """
         # Store the profile name and region for later use
         self.profile_name = profile_name
         self.region_name = region_name
+        self.aws_access_key_id = aws_access_key_id
+        self.aws_secret_access_key = aws_secret_access_key
+        self.aws_session_token = aws_session_token
 
-        # Initialize boto3 CloudWatch Logs client using specified profile/region or default credential chain
-        session = boto3.Session(profile_name=profile_name, region_name=region_name)
+        # Initialize boto3 CloudWatch Logs client
+        if aws_access_key_id and aws_secret_access_key:
+            # Use directly provided credentials (e.g., from Juno's AssumeRole)
+            session = boto3.Session(
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                aws_session_token=aws_session_token,
+                region_name=region_name
+            )
+        else:
+            # Use specified profile/region or default credential chain
+            session = boto3.Session(profile_name=profile_name, region_name=region_name)
+
         self.logs_client = session.client("logs")
+        self._session = session  # Store session for creating other clients
+
+    def _get_cloudwatch_client(self):
+        """Get a CloudWatch client using the same credentials."""
+        return self._session.client("cloudwatch")
 
     def get_log_groups(
         self, prefix: str = None, limit: int = 50, next_token: str = None
@@ -95,10 +119,7 @@ class CloudWatchLogsResource:
                 retention = f"{log_group['retentionInDays']} days"
 
             # Get metrics for the log group
-            session = boto3.Session(
-                profile_name=self.profile_name, region_name=self.region_name
-            )
-            cloudwatch = session.client("cloudwatch")
+            cloudwatch = self._get_cloudwatch_client()
             end_time = datetime.utcnow()
             start_time = end_time - timedelta(days=1)
 
@@ -331,10 +352,7 @@ class CloudWatchLogsResource:
         """Get log volume metrics for a log group."""
         try:
             # Create CloudWatch client
-            session = boto3.Session(
-                profile_name=self.profile_name, region_name=self.region_name
-            )
-            cloudwatch = session.client("cloudwatch")
+            cloudwatch = self._get_cloudwatch_client()
 
             # Calculate start and end times
             end_time = datetime.utcnow()

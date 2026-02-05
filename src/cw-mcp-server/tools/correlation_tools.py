@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-# SPDX-License-Identifier: Apache-2.0
+# Copyright 2024 Uptycs, Inc. All rights reserved.
 
 import asyncio
 import boto3
@@ -17,17 +16,33 @@ from .utils import get_time_range
 class CloudWatchLogsCorrelationTools:
     """Tools for correlating logs across multiple CloudWatch Log groups."""
 
-    def __init__(self, profile_name=None, region_name=None):
+    def __init__(self, profile_name=None, region_name=None,
+                 aws_access_key_id=None, aws_secret_access_key=None, aws_session_token=None):
         """Initialize the CloudWatch Logs client.
 
         Args:
             profile_name: Optional AWS profile name to use for credentials
             region_name: Optional AWS region name to use for API calls
+            aws_access_key_id: Optional AWS access key ID (for direct credential injection)
+            aws_secret_access_key: Optional AWS secret access key (for direct credential injection)
+            aws_session_token: Optional AWS session token (for temporary credentials)
         """
-        # Initialize boto3 CloudWatch Logs client using specified profile/region or default credential chain
         self.profile_name = profile_name
         self.region_name = region_name
-        session = boto3.Session(profile_name=profile_name, region_name=region_name)
+
+        # Initialize boto3 CloudWatch Logs client
+        if aws_access_key_id and aws_secret_access_key:
+            # Use directly provided credentials (e.g., from Juno's AssumeRole)
+            session = boto3.Session(
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                aws_session_token=aws_session_token,
+                region_name=region_name
+            )
+        else:
+            # Use specified profile/region or default credential chain
+            session = boto3.Session(profile_name=profile_name, region_name=region_name)
+
         self.logs_client = session.client("logs")
 
     @handle_exceptions
