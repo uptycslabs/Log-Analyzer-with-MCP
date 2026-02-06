@@ -47,14 +47,18 @@ default_profile = args.profile
 default_region = args.region
 
 
-# Helper decorator to handle profile and region parameters for tools
+# Helper decorator to handle profile, region, and AWS credentials for tools
 def with_aws_config(tool_class: Type, method_name: Optional[str] = None) -> Callable:
     """
-    Decorator that handles the profile and region parameters for tool functions.
-    Creates a new instance of the specified tool class with the correct profile and region.
+    Decorator that handles the profile, region, and AWS credentials for tool functions.
+    Creates a new instance of the specified tool class with the correct credentials.
+
+    When aws_access_key_id/aws_secret_access_key/aws_session_token are provided,
+    they are used directly (e.g., from Juno's AssumeRole). Otherwise, falls back
+    to profile/region or default credential chain.
 
     Args:
-        tool_class: The class to instantiate with the profile and region
+        tool_class: The class to instantiate with the credentials
         method_name: Optional method name if different from the decorated function
     """
 
@@ -62,9 +66,22 @@ def with_aws_config(tool_class: Type, method_name: Optional[str] = None) -> Call
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
             try:
+                # Pop account_id - used by Juno for credential resolution, not by the tool itself
+                kwargs.pop("account_id", None)
                 profile = kwargs.pop("profile", None) or default_profile
                 region = kwargs.pop("region", None) or default_region
-                tool_instance = tool_class(profile_name=profile, region_name=region)
+                # Extract direct credential parameters (from Juno's AssumeRole)
+                aws_access_key_id = kwargs.pop("aws_access_key_id", None)
+                aws_secret_access_key = kwargs.pop("aws_secret_access_key", None)
+                aws_session_token = kwargs.pop("aws_session_token", None)
+
+                tool_instance = tool_class(
+                    profile_name=profile,
+                    region_name=region,
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_secret_access_key,
+                    aws_session_token=aws_session_token
+                )
                 target_method = method_name or func.__name__
                 method = getattr(tool_instance, target_method)
                 result = method(**kwargs)
@@ -275,21 +292,25 @@ Feel free to ask for additional context if needed, such as:
 @mcp.tool()
 @with_aws_config(CloudWatchLogsResource, method_name="get_log_groups")
 async def list_log_groups(
+    account_id: str,
+    region: str,
     prefix: str = None,
     limit: int = 50,
     next_token: str = None,
     profile: str = None,
-    region: str = None,
+    aws_access_key_id: str = None,
+    aws_secret_access_key: str = None,
+    aws_session_token: str = None,
 ) -> str:
     """
     List available CloudWatch log groups with optional filtering by prefix.
 
     Args:
+        account_id: AWS account ID for the target account
+        region: AWS region name (e.g., us-east-1, eu-west-1)
         prefix: Optional prefix to filter log groups by name
         limit: Maximum number of log groups to return (default: 50)
         next_token: Token for pagination to get the next set of results
-        profile: Optional AWS profile name to use for credentials
-        region: Optional AWS region name to use for API calls
 
     Returns:
         JSON string with log groups information
@@ -301,25 +322,29 @@ async def list_log_groups(
 @mcp.tool()
 @with_aws_config(CloudWatchLogsSearchTools)
 async def search_logs(
+    account_id: str,
+    region: str,
     log_group_name: str,
     query: str,
     hours: int = 24,
     start_time: str = None,
     end_time: str = None,
     profile: str = None,
-    region: str = None,
+    aws_access_key_id: str = None,
+    aws_secret_access_key: str = None,
+    aws_session_token: str = None,
 ) -> str:
     """
     Search logs using CloudWatch Logs Insights query.
 
     Args:
+        account_id: AWS account ID for the target account
+        region: AWS region name (e.g., us-east-1, eu-west-1)
         log_group_name: The log group to search
         query: CloudWatch Logs Insights query syntax
         hours: Number of hours to look back
         start_time: Optional ISO8601 start time
         end_time: Optional ISO8601 end time
-        profile: Optional AWS profile name to use for credentials
-        region: Optional AWS region name to use for API calls
 
     Returns:
         JSON string with search results
@@ -331,25 +356,29 @@ async def search_logs(
 @mcp.tool()
 @with_aws_config(CloudWatchLogsSearchTools)
 async def search_logs_multi(
+    account_id: str,
+    region: str,
     log_group_names: List[str],
     query: str,
     hours: int = 24,
     start_time: str = None,
     end_time: str = None,
     profile: str = None,
-    region: str = None,
+    aws_access_key_id: str = None,
+    aws_secret_access_key: str = None,
+    aws_session_token: str = None,
 ) -> str:
     """
     Search logs across multiple log groups using CloudWatch Logs Insights.
 
     Args:
+        account_id: AWS account ID for the target account
+        region: AWS region name (e.g., us-east-1, eu-west-1)
         log_group_names: List of log groups to search
         query: CloudWatch Logs Insights query in Logs Insights syntax
         hours: Number of hours to look back (default: 24)
         start_time: Optional ISO8601 start time
         end_time: Optional ISO8601 end time
-        profile: Optional AWS profile name to use for credentials
-        region: Optional AWS region name to use for API calls
 
     Returns:
         JSON string with search results
@@ -361,25 +390,29 @@ async def search_logs_multi(
 @mcp.tool()
 @with_aws_config(CloudWatchLogsSearchTools)
 async def filter_log_events(
+    account_id: str,
+    region: str,
     log_group_name: str,
     filter_pattern: str,
     hours: int = 24,
     start_time: str = None,
     end_time: str = None,
     profile: str = None,
-    region: str = None,
+    aws_access_key_id: str = None,
+    aws_secret_access_key: str = None,
+    aws_session_token: str = None,
 ) -> str:
     """
     Filter log events by pattern across all streams in a log group.
 
     Args:
+        account_id: AWS account ID for the target account
+        region: AWS region name (e.g., us-east-1, eu-west-1)
         log_group_name: The log group to filter
         filter_pattern: The pattern to search for (CloudWatch Logs filter syntax)
         hours: Number of hours to look back
         start_time: Optional ISO8601 start time
         end_time: Optional ISO8601 end time
-        profile: Optional AWS profile name to use for credentials
-        region: Optional AWS region name to use for API calls
 
     Returns:
         JSON string with filtered events
@@ -391,23 +424,27 @@ async def filter_log_events(
 @mcp.tool()
 @with_aws_config(CloudWatchLogsAnalysisTools)
 async def summarize_log_activity(
+    account_id: str,
+    region: str,
     log_group_name: str,
     hours: int = 24,
     start_time: str = None,
     end_time: str = None,
     profile: str = None,
-    region: str = None,
+    aws_access_key_id: str = None,
+    aws_secret_access_key: str = None,
+    aws_session_token: str = None,
 ) -> str:
     """
     Generate a summary of log activity over a specified time period.
 
     Args:
+        account_id: AWS account ID for the target account
+        region: AWS region name (e.g., us-east-1, eu-west-1)
         log_group_name: The log group to analyze
         hours: Number of hours to look back
         start_time: Optional ISO8601 start time
         end_time: Optional ISO8601 end time
-        profile: Optional AWS profile name to use for credentials
-        region: Optional AWS region name to use for API calls
 
     Returns:
         JSON string with activity summary
@@ -419,23 +456,27 @@ async def summarize_log_activity(
 @mcp.tool()
 @with_aws_config(CloudWatchLogsAnalysisTools)
 async def find_error_patterns(
+    account_id: str,
+    region: str,
     log_group_name: str,
     hours: int = 24,
     start_time: str = None,
     end_time: str = None,
     profile: str = None,
-    region: str = None,
+    aws_access_key_id: str = None,
+    aws_secret_access_key: str = None,
+    aws_session_token: str = None,
 ) -> str:
     """
     Find common error patterns in logs.
 
     Args:
+        account_id: AWS account ID for the target account
+        region: AWS region name (e.g., us-east-1, eu-west-1)
         log_group_name: The log group to analyze
         hours: Number of hours to look back
         start_time: Optional ISO8601 start time
         end_time: Optional ISO8601 end time
-        profile: Optional AWS profile name to use for credentials
-        region: Optional AWS region name to use for API calls
 
     Returns:
         JSON string with error patterns
@@ -447,25 +488,29 @@ async def find_error_patterns(
 @mcp.tool()
 @with_aws_config(CloudWatchLogsCorrelationTools)
 async def correlate_logs(
+    account_id: str,
+    region: str,
     log_group_names: List[str],
     search_term: str,
     hours: int = 24,
     start_time: str = None,
     end_time: str = None,
     profile: str = None,
-    region: str = None,
+    aws_access_key_id: str = None,
+    aws_secret_access_key: str = None,
+    aws_session_token: str = None,
 ) -> str:
     """
     Correlate logs across multiple AWS services using a common search term.
 
     Args:
+        account_id: AWS account ID for the target account
+        region: AWS region name (e.g., us-east-1, eu-west-1)
         log_group_names: List of log group names to search
         search_term: Term to search for in logs (request ID, transaction ID, etc.)
         hours: Number of hours to look back
         start_time: Optional ISO8601 start time
         end_time: Optional ISO8601 end time
-        profile: Optional AWS profile name to use for credentials
-        region: Optional AWS region name to use for API calls
 
     Returns:
         JSON string with correlated events
