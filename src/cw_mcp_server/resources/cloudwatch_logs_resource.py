@@ -33,25 +33,38 @@ class CloudWatchLogsResource:
         self.aws_secret_access_key = aws_secret_access_key
         self.aws_session_token = aws_session_token
 
-        # Initialize boto3 CloudWatch Logs client
-        if aws_access_key_id and aws_secret_access_key:
-            # Use directly provided credentials (e.g., from Juno's AssumeRole)
-            session = boto3.Session(
-                aws_access_key_id=aws_access_key_id,
-                aws_secret_access_key=aws_secret_access_key,
-                aws_session_token=aws_session_token,
-                region_name=region_name
-            )
-        else:
-            # Use specified profile/region or default credential chain
-            session = boto3.Session(profile_name=profile_name, region_name=region_name)
+        # Lazy initialization - only create client when credentials are available
+        self._session = None
+        self._logs_client = None
 
-        self.logs_client = session.client("logs")
-        self._session = session  # Store session for creating other clients
+    def _get_session(self):
+        """Get or create a boto3 session with the configured credentials."""
+        if self._session is None:
+            if self.aws_access_key_id and self.aws_secret_access_key:
+                # Use directly provided credentials (e.g., from Juno's AssumeRole)
+                self._session = boto3.Session(
+                    aws_access_key_id=self.aws_access_key_id,
+                    aws_secret_access_key=self.aws_secret_access_key,
+                    aws_session_token=self.aws_session_token,
+                    region_name=self.region_name
+                )
+            else:
+                # Use specified profile/region or default credential chain
+                self._session = boto3.Session(
+                    profile_name=self.profile_name, region_name=self.region_name
+                )
+        return self._session
+
+    @property
+    def logs_client(self):
+        """Lazy initialization of CloudWatch Logs client."""
+        if self._logs_client is None:
+            self._logs_client = self._get_session().client("logs")
+        return self._logs_client
 
     def _get_cloudwatch_client(self):
         """Get a CloudWatch client using the same credentials."""
-        return self._session.client("cloudwatch")
+        return self._get_session().client("cloudwatch")
 
     def get_log_groups(
         self, prefix: str = None, limit: int = 50, next_token: str = None
