@@ -16,7 +16,8 @@ class CloudWatchLogsResource:
     """Resource class for handling CloudWatch Logs resources."""
 
     def __init__(self, profile_name=None, region_name=None,
-                 aws_access_key_id=None, aws_secret_access_key=None, aws_session_token=None):
+                 aws_access_key_id=None, aws_secret_access_key=None, aws_session_token=None,
+                 no_default_creds=False):
         """Initialize the CloudWatch Logs resource client.
 
         Args:
@@ -25,6 +26,7 @@ class CloudWatchLogsResource:
             aws_access_key_id: Optional AWS access key ID (for direct credential injection)
             aws_secret_access_key: Optional AWS secret access key (for direct credential injection)
             aws_session_token: Optional AWS session token (for temporary credentials)
+            no_default_creds: If True, require explicit credentials and never use default chain
         """
         # Store the profile name and region for later use
         self.profile_name = profile_name
@@ -32,6 +34,7 @@ class CloudWatchLogsResource:
         self.aws_access_key_id = aws_access_key_id
         self.aws_secret_access_key = aws_secret_access_key
         self.aws_session_token = aws_session_token
+        self.no_default_creds = no_default_creds
 
         # Lazy initialization - only create client when credentials are available
         self._session = None
@@ -47,6 +50,12 @@ class CloudWatchLogsResource:
                     aws_secret_access_key=self.aws_secret_access_key,
                     aws_session_token=self.aws_session_token,
                     region_name=self.region_name
+                )
+            elif self.no_default_creds:
+                # Explicit credentials required but not provided
+                raise ValueError(
+                    "No credentials provided. When --no-default-creds is set, "
+                    "aws_access_key_id and aws_secret_access_key must be provided."
                 )
             else:
                 # Use specified profile/region or default credential chain

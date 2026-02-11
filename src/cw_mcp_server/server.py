@@ -24,6 +24,12 @@ parser.add_argument("--region", type=str, help="AWS region name to use for API c
 parser.add_argument(
     "--stateless", action="store_true", help="Stateless HTTP mode", default=False
 )
+parser.add_argument(
+    "--no-default-creds",
+    action="store_true",
+    help="Disable default credential chain; require per-call credentials",
+    default=False,
+)
 args, unknown = parser.parse_known_args()
 
 
@@ -31,20 +37,31 @@ args, unknown = parser.parse_known_args()
 mcp = FastMCP("CloudWatch Logs Analyzer", stateless_http=args.stateless)
 
 # Initialize our resource and tools classes with the specified AWS profile and region
-cw_resource = CloudWatchLogsResource(profile_name=args.profile, region_name=args.region)
+cw_resource = CloudWatchLogsResource(
+    profile_name=args.profile,
+    region_name=args.region,
+    no_default_creds=args.no_default_creds,
+)
 search_tools = CloudWatchLogsSearchTools(
-    profile_name=args.profile, region_name=args.region
+    profile_name=args.profile,
+    region_name=args.region,
+    no_default_creds=args.no_default_creds,
 )
 analysis_tools = CloudWatchLogsAnalysisTools(
-    profile_name=args.profile, region_name=args.region
+    profile_name=args.profile,
+    region_name=args.region,
+    no_default_creds=args.no_default_creds,
 )
 correlation_tools = CloudWatchLogsCorrelationTools(
-    profile_name=args.profile, region_name=args.region
+    profile_name=args.profile,
+    region_name=args.region,
+    no_default_creds=args.no_default_creds,
 )
 
 # Capture the parsed CLI profile and region in separate variables
 default_profile = args.profile
 default_region = args.region
+no_default_creds = args.no_default_creds
 
 
 # Helper decorator to handle profile, region, and AWS credentials for tools
@@ -80,7 +97,8 @@ def with_aws_config(tool_class: Type, method_name: Optional[str] = None) -> Call
                     region_name=region,
                     aws_access_key_id=aws_access_key_id,
                     aws_secret_access_key=aws_secret_access_key,
-                    aws_session_token=aws_session_token
+                    aws_session_token=aws_session_token,
+                    no_default_creds=no_default_creds,
                 )
                 target_method = method_name or func.__name__
                 method = getattr(tool_instance, target_method)
