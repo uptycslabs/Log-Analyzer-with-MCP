@@ -18,7 +18,8 @@ class CloudWatchLogsSearchTools:
     """Tools for searching and querying CloudWatch Logs."""
 
     def __init__(self, profile_name=None, region_name=None,
-                 aws_access_key_id=None, aws_secret_access_key=None, aws_session_token=None):
+                 aws_access_key_id=None, aws_secret_access_key=None, aws_session_token=None,
+                 no_default_creds=False):
         """Initialize the CloudWatch Logs client.
 
         Args:
@@ -27,24 +28,49 @@ class CloudWatchLogsSearchTools:
             aws_access_key_id: Optional AWS access key ID (for direct credential injection)
             aws_secret_access_key: Optional AWS secret access key (for direct credential injection)
             aws_session_token: Optional AWS session token (for temporary credentials)
+            no_default_creds: If True, require explicit credentials and never use default chain
         """
         self.profile_name = profile_name
         self.region_name = region_name
+        self.aws_access_key_id = aws_access_key_id
+        self.aws_secret_access_key = aws_secret_access_key
+        self.aws_session_token = aws_session_token
+        self.no_default_creds = no_default_creds
 
-        # Initialize boto3 CloudWatch Logs client
-        if aws_access_key_id and aws_secret_access_key:
-            # Use directly provided credentials (e.g., from Juno's AssumeRole)
-            session = boto3.Session(
-                aws_access_key_id=aws_access_key_id,
-                aws_secret_access_key=aws_secret_access_key,
-                aws_session_token=aws_session_token,
-                region_name=region_name
-            )
-        else:
-            # Use specified profile/region or default credential chain
-            session = boto3.Session(profile_name=profile_name, region_name=region_name)
+        # Lazy initialization - only create client when needed
+        self._session = None
+        self._logs_client = None
 
-        self.logs_client = session.client("logs")
+    def _get_session(self):
+        """Get or create a boto3 session with the configured credentials."""
+        if self._session is None:
+            if self.aws_access_key_id and self.aws_secret_access_key:
+                # Use directly provided credentials (e.g., from Juno's AssumeRole)
+                self._session = boto3.Session(
+                    aws_access_key_id=self.aws_access_key_id,
+                    aws_secret_access_key=self.aws_secret_access_key,
+                    aws_session_token=self.aws_session_token,
+                    region_name=self.region_name
+                )
+            elif self.no_default_creds:
+                # Explicit credentials required but not provided
+                raise ValueError(
+                    "No credentials provided. When --no-default-creds is set, "
+                    "aws_access_key_id and aws_secret_access_key must be provided."
+                )
+            else:
+                # Use specified profile/region or default credential chain
+                self._session = boto3.Session(
+                    profile_name=self.profile_name, region_name=self.region_name
+                )
+        return self._session
+
+    @property
+    def logs_client(self):
+        """Lazy initialization of CloudWatch Logs client."""
+        if self._logs_client is None:
+            self._logs_client = self._get_session().client("logs")
+        return self._logs_client
 
     @handle_exceptions
     async def search_logs(
